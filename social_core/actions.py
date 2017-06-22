@@ -5,7 +5,6 @@ from .utils import sanitize_redirect, user_is_authenticated, \
 from rest_framework_jwt.serializers import jwt_payload_handler, jwt_encode_handler
 from rest_framework import status
 from django.http import HttpResponse
-from datetime import date
 import datetime
 
 
@@ -66,7 +65,7 @@ def do_complete(backend, login, user=None, redirect_name='next',
             sex = user.sex if user.sex else ''
             bdate = ''
             if user.birthday:
-                today = date.today()
+                today = datetime.date.today()
                 if (today.year - user.birthday.year - ((today.month, today.day) < (user.birthday.month, user.birthday.day))) > 17:
                     bdate = user.birthday.strftime('%d.%m.%Y')
             req_info = '&b=' + bdate + '&s=' + str(sex)
@@ -83,7 +82,7 @@ def do_complete(backend, login, user=None, redirect_name='next',
             sex = user.sex if user.sex else ''
             bdate = ''
             if user.birthday:
-                today = date.today()
+                today = datetime.date.today()
                 if (today.year - user.birthday.year - ((today.month, today.day) < (user.birthday.month, user.birthday.day))) > 17:
                     bdate = user.birthday.strftime('%d.%m.%Y')
             req_info = '&b=' + bdate + '&s=' + str(sex)
