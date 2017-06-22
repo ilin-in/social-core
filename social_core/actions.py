@@ -5,7 +5,7 @@ from .utils import sanitize_redirect, user_is_authenticated, \
 from rest_framework_jwt.serializers import jwt_payload_handler, jwt_encode_handler
 from rest_framework import status
 from django.http import HttpResponse
-import datetime
+from datetime import date
 
 
 def do_auth(backend, redirect_name='next'):
