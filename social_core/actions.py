@@ -1,11 +1,12 @@
 from six.moves.urllib_parse import quote
 
 from .utils import sanitize_redirect, user_is_authenticated, \
-                   user_is_active, partial_pipeline_data, setting_url
+    user_is_active, partial_pipeline_data, setting_url
 from rest_framework_jwt.serializers import jwt_payload_handler, jwt_encode_handler
 from rest_framework import status
 from django.http import HttpResponse
 import datetime
+import urllib
 
 
 def do_auth(backend, redirect_name='next'):
@@ -55,21 +56,35 @@ def do_complete(backend, login, user=None, redirect_name='next',
     if user and not isinstance(user, user_model):
         return user
 
-    APP_URL_SCHEME_PREFIX = 'pickerUrl://?'
+    res = {'st': 1}
+    if user:
+        if user.social_user:
+            if user.social_user.provider == 'vk-oauth2':
+                res.update({'hp': bool(user.social_user.extra_data['has_photo']) or user.main_photo,
+                            'pu': user.social_user.extra_data['photo_max_orig']})
+            elif user.social_user.provider == 'facebook':
+                pic_is_silhouette = backend.strategy.session_get('pic_is_silhouette')
+                if pic_is_silhouette is not None:
+                    res['hp'] = not pic_is_silhouette or user.main_photo
+
+                pic_url = backend.strategy.session_get('pic_url')
+                if pic_url is not None:
+                    res['pu'] = pic_url
+        sex = user.sex if user.sex else ''
+        bdate = ''
+        if user.birthday:
+            today = datetime.date.today()
+            if (today.year - user.birthday.year - ((today.month, today.day) < (user.birthday.month, user.birthday.day))) > 17:
+                bdate = user.birthday.strftime('%d.%m.%Y')
+        res.update({'b': bdate, 's': str(sex)})
+
+    app_url_scheme_prefix = 'pickerUrl://?'
     response = HttpResponse("", status=302)
     if is_authenticated:
         if not user:
-            information = 'st=-1&m=User%20error'
+            res.update({'st': -1, 'm': 'User error'})
         else:
             payload = jwt_payload_handler(user)
-            sex = user.sex if user.sex else ''
-            bdate = ''
-            if user.birthday:
-                today = datetime.date.today()
-                if (today.year - user.birthday.year - ((today.month, today.day) < (user.birthday.month, user.birthday.day))) > 17:
-                    bdate = user.birthday.strftime('%d.%m.%Y')
-            req_info = '&b=' + bdate + '&s=' + str(sex)
-            information = 'st=1' + req_info
     elif user:
         payload = jwt_payload_handler(user)
         if user_is_active(user):
@@ -78,34 +93,25 @@ def do_complete(backend, login, user=None, redirect_name='next',
             social_user = user.social_user
             # login(backend, user, social_user)
 
-
-            sex = user.sex if user.sex else ''
-            bdate = ''
-            if user.birthday:
-                today = datetime.date.today()
-                if (today.year - user.birthday.year - ((today.month, today.day) < (user.birthday.month, user.birthday.day))) > 17:
-                    bdate = user.birthday.strftime('%d.%m.%Y')
-            req_info = '&b=' + bdate + '&s=' + str(sex)
-
             # store last login backend name in session
             backend.strategy.session_set('social_auth_last_login_backend', social_user.provider)
 
             if is_new:
-                response['Location'] = APP_URL_SCHEME_PREFIX + 't=' + jwt_encode_handler(payload) + '&n=1&st=1' + req_info
-                return response
+                res.update({'t': jwt_encode_handler(payload), 'n': 1})
             else:
-                response['Location'] = APP_URL_SCHEME_PREFIX + 't=' + jwt_encode_handler(payload) + '&n=-1&st=1' + req_info
-                return response
+                res.update({'t': jwt_encode_handler(payload), 'n': -1})
         else:
-            response['Location'] = APP_URL_SCHEME_PREFIX + 'st=-1&m=The%20user%20account%20is%20disabled'
-            return response
+            res.update({'st': -1, 'm': 'The user account is disabled'})
+        response['Location'] = app_url_scheme_prefix + urllib.parse.urlencode(res)
+        return response
     else:
-        information = 'st=-1&m=Not%20found'
+        res.update({'st': -1, 'm': 'Not found'})
 
     try:
-        response['Location'] = APP_URL_SCHEME_PREFIX + information + '&t=' + jwt_encode_handler(payload)
+        res.update({'t': jwt_encode_handler(payload)})
+        response['Location'] = app_url_scheme_prefix + urllib.parse.urlencode(res)
     except TypeError:
-        response['Location'] = APP_URL_SCHEME_PREFIX + information
+        response['Location'] = app_url_scheme_prefix + urllib.parse.urlencode(res)
     return response
 
 
@@ -132,7 +138,7 @@ def do_disconnect(backend, user, association_id=None, redirect_name='next',
             allowed_hosts = backend.setting('ALLOWED_REDIRECT_HOSTS', []) + \
                             [backend.strategy.request_host()]
             url = sanitize_redirect(allowed_hosts, url) or \
-                backend.setting('DISCONNECT_REDIRECT_URL') or \
-                backend.setting('LOGIN_REDIRECT_URL')
+                  backend.setting('DISCONNECT_REDIRECT_URL') or \
+                  backend.setting('LOGIN_REDIRECT_URL')
         response = backend.strategy.redirect(url)
     return response
